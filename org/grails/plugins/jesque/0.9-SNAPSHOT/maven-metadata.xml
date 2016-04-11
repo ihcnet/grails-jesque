@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata modelVersion="1.1.0">
+  <groupId>org.grails.plugins</groupId>
+  <artifactId>jesque</artifactId>
+  <version>0.9-SNAPSHOT</version>
+  <versioning>
+    <snapshot>
+      <timestamp>20160411.085712</timestamp>
+      <buildNumber>1</buildNumber>
+    </snapshot>
+    <lastUpdated>20160411085712</lastUpdated>
+    <snapshotVersions>
+      <snapshotVersion>
+        <extension>zip</extension>
+        <value>0.9-20160411.085712-1</value>
+        <updated>20160411085712</updated>
+      </snapshotVersion>
+      <snapshotVersion>
+        <extension>pom</extension>
+        <value>0.9-20160411.085712-1</value>
+        <updated>20160411085712</updated>
+      </snapshotVersion>
+    </snapshotVersions>
+  </versioning>
+</metadata>
