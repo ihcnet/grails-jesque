@@ -2,7 +2,7 @@ package grails.plugin.jesque
 
 import grails.plugin.jesque.test.RedisAutoWireJob
 import grails.plugin.redis.RedisService
-import grails.plugin.spock.IntegrationSpec
+import grails.test.spock.IntegrationSpec
 import net.greghaines.jesque.meta.dao.FailureDAO
 import net.greghaines.jesque.meta.dao.QueueInfoDAO
 

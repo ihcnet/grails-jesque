@@ -1,11 +1,11 @@
 package grails.plugin.jesque
 
-import grails.plugin.spock.IntegrationSpec
 import grails.plugin.jesque.test.SelfConfiguredJob
 import grails.plugin.jesque.test.SimpleJob
 import grails.plugin.jesque.test.ScheduledTestJob
+import grails.test.spock.IntegrationSpec
 
-class JesqueConfigurationServiceSpec extends IntegrationSpec{
+class JesqueConfigurationServiceSpec extends IntegrationSpec {
 
     def jesqueConfigurationService
     def grailsApplication
@@ -35,7 +35,9 @@ class JesqueConfigurationServiceSpec extends IntegrationSpec{
 
         then:
         Exception exception = thrown()
-        while( exception.cause ) { exception = exception.cause }
+        while (exception.cause) {
+            exception = exception.cause
+        }
         exception.message =~ /specifies worker pool .* but configuration file has/
     }
 
@@ -63,7 +65,9 @@ class JesqueConfigurationServiceSpec extends IntegrationSpec{
 
         then:
         Exception exception = thrown()
-        while( exception.cause ) { exception = exception.cause }
+        while (exception.cause) {
+            exception = exception.cause
+        }
         exception.message =~ /specifies queue name .* but worker pool .* has/
     }
 

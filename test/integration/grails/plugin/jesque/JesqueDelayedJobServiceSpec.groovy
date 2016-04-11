@@ -1,8 +1,8 @@
 package grails.plugin.jesque
 
+import grails.test.spock.IntegrationSpec
 import org.joda.time.DateTime
 import grails.plugin.jesque.test.SimpleJob
-import grails.plugin.spock.IntegrationSpec
 
 class JesqueDelayedJobServiceSpec extends IntegrationSpec {
 
@@ -20,7 +20,7 @@ class JesqueDelayedJobServiceSpec extends IntegrationSpec {
 
         when:
         jesqueDelayedJobService.enqueueReadyJobs()
-        jesqueService.withWorker( queueName, SimpleJob.simpleName, SimpleJob ) {
+        jesqueService.withWorker(queueName, SimpleJob.simpleName, SimpleJob) {
             sleep(2000)
         }
 
