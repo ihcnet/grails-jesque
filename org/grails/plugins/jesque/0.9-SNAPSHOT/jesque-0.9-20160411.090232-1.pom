@@ -95,7 +95,7 @@
         <dependency>
             <groupId>org.grails.plugins</groupId>
             <artifactId>redis</artifactId>
-            <version>1.6.6</version>
+            <version>1.5.5</version>
             <scope>compile</scope>
 
             <type>zip</type>
