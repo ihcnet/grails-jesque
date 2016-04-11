@@ -15,8 +15,16 @@ class WorkerLifecycleListener implements WorkerListener {
 
     void onEvent(WorkerEvent workerEvent, Worker worker, String queue, Job job, Object runner, Object result, Exception ex) {
         log.debug("Processing worker event ${workerEvent.name()}")
-        if( workerEvent == WorkerEvent.WORKER_STOP ) {
+        if (workerEvent == WorkerEvent.WORKER_STOP) {
             jesqueService.removeWorkerFromLifecycleTracking(worker)
         }
     }
+
+    void onEvent(WorkerEvent workerEvent, Worker worker, String queue, Job job, Object runner, Object result, Throwable t) {
+        log.debug("Processing worker event ${workerEvent.name()}")
+        if (workerEvent == WorkerEvent.WORKER_STOP) {
+            jesqueService.removeWorkerFromLifecycleTracking(worker)
+        }
+    }
+
 }

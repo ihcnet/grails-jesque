@@ -1,6 +1,7 @@
 package grails.plugin.jesque
 
 import grails.spring.BeanBuilder
+import net.greghaines.jesque.worker.JobFactory
 import org.codehaus.groovy.grails.commons.GrailsApplication
 import static net.greghaines.jesque.utils.ResqueConstants.WORKER
 import static net.greghaines.jesque.worker.WorkerEvent.JOB_PROCESS
@@ -24,8 +25,8 @@ class GrailsWorkerImpl extends WorkerImpl {
             GrailsApplication grailsApplication,
             final Config config,
             final Collection<String> queues,
-            final Map<String, Class> jobTypes) {
-        super(config, queues, jobTypes)
+            final JobFactory jobFactory) {
+        super(config, queues, jobFactory)
 
         this.grailsApplication = grailsApplication
         beanBuilder = new BeanBuilder()
@@ -44,11 +45,12 @@ class GrailsWorkerImpl extends WorkerImpl {
         this.listenerDelegate.fireEvent(JOB_PROCESS, this, curQueue, job, null, null, null)
         renameThread("Processing " + curQueue + " since " + System.currentTimeMillis())
         try {
-            Class jobClass = jobTypes[job.className]
-            if(!jobClass) {
-                throw new UnpermittedJobException(job.className)
-            }
-            def instance = createInstance(jobClass.canonicalName)
+            def instance = jobFactory.materializeJob(job)
+//            Class jobClass = jobFactory[job.className]
+//            if (!jobClass) {
+//                throw new UnpermittedJobException(job.className)
+//            }
+//            def instance = createInstance(jobClass.canonicalName)
             execute(job, curQueue, instance, job.args)
         } catch (Exception e) {
             failure(e, job, curQueue)
@@ -69,7 +71,7 @@ class GrailsWorkerImpl extends WorkerImpl {
         try {
             final Object result
             this.listenerDelegate.fireEvent(JOB_EXECUTE, this, curQueue, job, instance, null, null)
-            result = instance.perform(* args)
+            result = instance.run(*args)
             success(job, instance, result, curQueue)
         } finally {
             this.jedis.del(key(WORKER, this.name))
@@ -80,20 +82,21 @@ class GrailsWorkerImpl extends WorkerImpl {
         super.recoverFromException(curQueue, e)
         final RecoveryStrategy recoveryStrategy = this.exceptionHandler.onException(this, e, curQueue)
         final int reconnectAttempts = getReconnectAttempts()
-        switch (recoveryStrategy)
-        {
+        switch (recoveryStrategy) {
             case RecoveryStrategy.RECONNECT:
                 def attempt = 0
 
-                while(attempt++ <= reconnectAttempts && !this.jedis.isConnected()) {
+                while (attempt++ <= reconnectAttempts && !this.jedis.isConnected()) {
                     log.info("Reconnecting to Redis in response to exception - Attempt $attempt of $reconnectAttempts", e)
-                    try
-                    {
+                    try {
                         this.jedis.disconnect()
-                        try { Thread.sleep(reconnectSleepTime) } catch (Exception ignore){}
+                        try {
+                            Thread.sleep(reconnectSleepTime)
+                        } catch (Exception ignore) {
+                        }
                         this.jedis.connect()
                         def pingResult = this.jedis.ping()
-                        if( pingResult != "PONG" )
+                        if (pingResult != "PONG")
                             log.info("Unexpected redis ping result, $pingResult")
                     } catch (JedisConnectionException ignore) {
                         // Ignore bad connection attempts

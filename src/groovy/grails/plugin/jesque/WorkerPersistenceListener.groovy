@@ -28,6 +28,15 @@ class WorkerPersistenceListener implements WorkerListener {
         }
     }
 
+    void onEvent(WorkerEvent workerEvent, Worker worker, String s, Job job, Object o, Object o1, Throwable t) {
+        log.debug("Processing worker event ${workerEvent.name()}")
+        if (workerEvent == WorkerEvent.JOB_EXECUTE) {
+            initiatied = bindSession()
+        } else if (workerEvent in [WorkerEvent.JOB_SUCCESS, WorkerEvent.JOB_FAILURE]) {
+            unbindSession()
+        }
+    }
+
     private boolean bindSession() {
         if (persistenceInterceptor == null)
             throw new IllegalStateException("No persistenceInterceptor found");

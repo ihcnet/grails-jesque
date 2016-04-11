@@ -8,6 +8,7 @@ import net.greghaines.jesque.client.Client
 import net.greghaines.jesque.meta.WorkerInfo
 import net.greghaines.jesque.meta.dao.WorkerInfoDAO
 import net.greghaines.jesque.worker.ExceptionHandler
+import net.greghaines.jesque.worker.MapBasedJobFactory
 import net.greghaines.jesque.worker.Worker
 import net.greghaines.jesque.worker.WorkerEvent
 import net.greghaines.jesque.worker.WorkerListener
@@ -125,7 +126,7 @@ class JesqueService implements DisposableBean {
     Worker startWorker(List<String> queues, Map<String, Class> jobTypes, ExceptionHandler exceptionHandler = null,
                        boolean paused = false) {
         log.debug "Starting worker processing queueus: ${queues}"
-
+        MapBasedJobFactory mapBasedJobFactory = new MapBasedJobFactory(jobTypes)
         def customWorkerClass = grailsApplication.config.grails.jesque.custom.worker.clazz
         Worker worker
         if (customWorkerClass && customWorkerClass in GrailsWorkerImpl) {
@@ -133,12 +134,12 @@ class JesqueService implements DisposableBean {
         } else {
             if (customWorkerClass)
                 log.warn('The specified custom worker class does not extend GrailsWorkerImpl. Ignoring it')
-            worker = new GrailsWorkerImpl(grailsApplication, jesqueConfig, queues, jobTypes)
+            worker = new GrailsWorkerImpl(grailsApplication, jesqueConfig, queues, mapBasedJobFactory)
         }
 
         def customListenerClass = grailsApplication.config.grails.jesque.custom.listener.clazz
         if (customListenerClass && customListenerClass in WorkerListener) {
-            worker.addListener(customListenerClass.newInstance() as WorkerListener)
+            worker.getWorkerEventEmitter().addListener(customListenerClass.newInstance() as WorkerListener)
         } else if (customListenerClass) {
             log.warn('The specified custom listener class does not implement WorkerListener. Ignoring it')
         }
@@ -167,11 +168,11 @@ class JesqueService implements DisposableBean {
             log.info("Enabling Persistence for all Jobs")
             def autoFlush = grailsApplication.config.grails.jesque.autoFlush ?: true
             def workerPersistenceListener = new WorkerPersistenceListener(persistenceInterceptor, autoFlush)
-            worker.addListener(workerPersistenceListener, WorkerEvent.JOB_EXECUTE, WorkerEvent.JOB_SUCCESS, WorkerEvent.JOB_FAILURE)
+            worker.getWorkerEventEmitter().addListener(workerPersistenceListener, WorkerEvent.JOB_EXECUTE, WorkerEvent.JOB_SUCCESS, WorkerEvent.JOB_FAILURE)
         }
 
         def workerLifeCycleListener = new WorkerLifecycleListener(this)
-        worker.addListener(workerLifeCycleListener, WorkerEvent.WORKER_STOP)
+        worker.getWorkerEventEmitter().addListener(workerLifeCycleListener, WorkerEvent.WORKER_STOP)
 
         def workerThread = new Thread(worker)
         workerThread.start()
