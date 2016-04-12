@@ -8,7 +8,7 @@ import net.greghaines.jesque.client.Client
 import net.greghaines.jesque.meta.WorkerInfo
 import net.greghaines.jesque.meta.dao.WorkerInfoDAO
 import net.greghaines.jesque.worker.ExceptionHandler
-import net.greghaines.jesque.worker.MapBasedJobFactory
+import net.greghaines.jesque.worker.JobFactory
 import net.greghaines.jesque.worker.Worker
 import net.greghaines.jesque.worker.WorkerEvent
 import net.greghaines.jesque.worker.WorkerListener
@@ -126,15 +126,16 @@ class JesqueService implements DisposableBean {
     Worker startWorker(List<String> queues, Map<String, Class> jobTypes, ExceptionHandler exceptionHandler = null,
                        boolean paused = false) {
         log.debug "Starting worker processing queueus: ${queues}"
-        MapBasedJobFactory mapBasedJobFactory = new MapBasedJobFactory(jobTypes)
+        JobFactory beanJobFactory = new BeanJobFactory(grailsApplication, jobTypes)
         def customWorkerClass = grailsApplication.config.grails.jesque.custom.worker.clazz
         Worker worker
         if (customWorkerClass && customWorkerClass in GrailsWorkerImpl) {
             worker = customWorkerClass.newInstance(grailsApplication, jesqueConfig, queues, jobTypes)
         } else {
-            if (customWorkerClass)
+            if (customWorkerClass) {
                 log.warn('The specified custom worker class does not extend GrailsWorkerImpl. Ignoring it')
-            worker = new GrailsWorkerImpl(grailsApplication, jesqueConfig, queues, mapBasedJobFactory)
+            }
+            worker = new GrailsWorkerImpl(grailsApplication, jesqueConfig, queues, beanJobFactory)
         }
 
         def customListenerClass = grailsApplication.config.grails.jesque.custom.listener.clazz

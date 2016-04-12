@@ -7,7 +7,7 @@ import java.lang.reflect.Method;
 public class JesqueJobArtefactHandler extends ArtefactHandlerAdapter {
 
     public static final String TYPE = "JesqueJob";
-    public static final String PERFORM = "perform";
+    private static final String PERFORM = "perform";
 
     public JesqueJobArtefactHandler() {
         super(TYPE, GrailsJesqueJobClass.class, DefaultGrailsJesqueJobClass.class, null);

@@ -3,12 +3,14 @@ package grails.plugin.jesque
 import grails.spring.BeanBuilder
 import net.greghaines.jesque.worker.JobFactory
 import org.codehaus.groovy.grails.commons.GrailsApplication
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+
 import static net.greghaines.jesque.utils.ResqueConstants.WORKER
 import static net.greghaines.jesque.worker.WorkerEvent.JOB_PROCESS
 import static net.greghaines.jesque.worker.WorkerEvent.JOB_EXECUTE
 import net.greghaines.jesque.Config
 import net.greghaines.jesque.Job
-import net.greghaines.jesque.worker.UnpermittedJobException
 import net.greghaines.jesque.worker.WorkerImpl
 import net.greghaines.jesque.worker.RecoveryStrategy
 import static net.greghaines.jesque.worker.WorkerEvent.WORKER_ERROR
@@ -16,7 +18,7 @@ import redis.clients.jedis.exceptions.JedisConnectionException
 
 class GrailsWorkerImpl extends WorkerImpl {
 
-    private Log
+    private Logger log = LoggerFactory.getLogger(GrailsWorkerImpl)
     BeanBuilder beanBuilder
     GrailsApplication grailsApplication
     JobExceptionHandler jobExceptionHandler
@@ -30,15 +32,6 @@ class GrailsWorkerImpl extends WorkerImpl {
 
         this.grailsApplication = grailsApplication
         beanBuilder = new BeanBuilder()
-    }
-
-    protected void checkJobType(final String jobName, final Class<?> jobType) {
-        if (jobName == null) {
-            throw new IllegalArgumentException("jobName must not be null")
-        }
-        if (jobType == null) {
-            throw new IllegalArgumentException("jobType must not be null")
-        }
     }
 
     protected void process(final Job job, final String curQueue) {
@@ -71,7 +64,7 @@ class GrailsWorkerImpl extends WorkerImpl {
         try {
             final Object result
             this.listenerDelegate.fireEvent(JOB_EXECUTE, this, curQueue, job, instance, null, null)
-            result = instance.run(*args)
+            result = instance.perform(*args)
             success(job, instance, result, curQueue)
         } finally {
             this.jedis.del(key(WORKER, this.name))
@@ -109,7 +102,7 @@ class GrailsWorkerImpl extends WorkerImpl {
                     log.error("Terminating in response to exception after $reconnectAttempts to reconnect", e)
                     end(false)
                 } else {
-                    log.info("Reconnected to Redis after $attempt attempts")
+                    log.info("Reconnected to Redis after {} attempts", attempt)
                 }
                 break
             case RecoveryStrategy.TERMINATE:
