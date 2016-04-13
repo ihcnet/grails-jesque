@@ -59,7 +59,7 @@ grails {
     jesque {
         workers {
             someNameForYourWorkerPool {
-                workers = 3 //defaults to 1
+                workers = 3 //defaults to 3
                 queueNames = 'myQueueName' //or a list
             }
         }
