@@ -119,7 +119,7 @@ class JesqueService implements DisposableBean {
 
     Worker startWorker(List<String> queues, JobFactory jobFactory = new GrailsJobFactory(grailsApplication), ExceptionHandler exceptionHandler = null,
                        boolean paused = false) {
-        log.info "Starting worker processing queueus: ${queues}"
+        log.info "Starting worker processing queues: ${queues}"
 
         def customWorkerClass = grailsApplication.config.grails.jesque.custom.worker.clazz
         Worker worker
