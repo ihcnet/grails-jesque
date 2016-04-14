@@ -1,0 +1,43 @@
+*~
+.~lock*
+target/*
+out/*
+.classpath
+.idea/*
+.project
+.settings/*
+*.iml
+stacktrace.log
+target-eclipse/
+/classes
+/web-app/WEB-INF/classes
+.DS_Store
+.link_to_grails_plugins
+
+# default HSQL database files for production mode
+/prodDb.*
+
+# general HSQL database files
+*Db.properties
+*Db.script
+
+# logs
+/stacktrace.log
+/test/reports
+/logs
+
+# project release file
+/*.war
+
+# plugin release files
+/*.zip
+/plugin.xml
+
+# older plugin install locations
+/plugins
+/web-app/plugins
+
+# "temporary" build files
+/target
+
+grails-app/conf/LocalConfig.groovy
