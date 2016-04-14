@@ -26,6 +26,7 @@ import net.greghaines.jesque.utils.JedisUtils;
 import net.greghaines.jesque.utils.JesqueUtils;
 import net.greghaines.jesque.utils.PoolUtils;
 import net.greghaines.jesque.utils.VersionUtils;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
@@ -437,7 +438,7 @@ public class WorkerJedisPoolImpl implements Worker {
                 // If the job JSON is not deserializable, we never want to submit it again...
                 removeInFlight(curQueue);
                 recoverFromException(curQueue, e);
-            } catch (JsonParseException  e) {
+            } catch (JsonParseException e) {
                 // If the job JSON is not deserializable, we never want to submit it again...
                 removeInFlight(curQueue);
                 recoverFromException(curQueue, e);
@@ -473,7 +474,10 @@ public class WorkerJedisPoolImpl implements Worker {
                             }
                         }
                     } else if (JedisUtils.isRegularQueue(jedis, key)) { // If a regular queue, pop from it
-                        stringBuffer.append(lpoplpush(key, key(INFLIGHT, name, curQueue)));
+                        final String tmp = lpoplpush(key, key(INFLIGHT, name, curQueue));
+                        if (StringUtils.isNotBlank(tmp)) {
+                            stringBuffer.append(tmp);
+                        }
                     }
                     return null;
                 }
@@ -481,7 +485,11 @@ public class WorkerJedisPoolImpl implements Worker {
         } catch (Exception ex) {
             ex.printStackTrace();
         }
-        return stringBuffer.toString();
+        String returnString = stringBuffer.toString();
+        if (StringUtils.isBlank(returnString)) {
+            return null;
+        }
+        return returnString;
 
     }
 
@@ -832,9 +840,11 @@ public class WorkerJedisPoolImpl implements Worker {
             ex.printStackTrace();
         }
 
-        if(stringBuffer.length() == 0)
+        String returnString = stringBuffer.toString();
+        if (StringUtils.isBlank(returnString)) {
             return null;
-        return stringBuffer.toString();
+        }
+        return returnString;
     }
 
     /**
