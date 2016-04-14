@@ -1,7 +1,6 @@
 package test
 
-import net.greghaines.jesque.worker.JobFactory
-import net.greghaines.jesque.worker.ReflectiveJobFactory
+import net.greghaines.jesque.meta.dao.QueueInfoDAO
 import org.joda.time.DateTime
 import grails.test.spock.IntegrationSpec
 
@@ -9,7 +8,7 @@ class JesqueDelayedJobServiceSpec extends IntegrationSpec {
 
     def jesqueDelayedJobService
     def jesqueService
-    def queueInfoDao
+    QueueInfoDAO queueInfoDao
     def failureDao
 
     void "test enqueue and dequeue"() {
@@ -18,11 +17,10 @@ class JesqueDelayedJobServiceSpec extends IntegrationSpec {
         def existingFailureCount = failureDao.count
         def queueName = 'testQueue'
         jesqueService.enqueueAt(DateTime.now(), queueName, SimpleJob.simpleName)
-        JobFactory jobFactory = new ReflectiveJobFactory()
 
         when:
         jesqueDelayedJobService.enqueueReadyJobs()
-        jesqueService.withWorker( queueName, jobFactory ) {
+        jesqueService.withWorker(queueName) {
             sleep(2000)
         }
 

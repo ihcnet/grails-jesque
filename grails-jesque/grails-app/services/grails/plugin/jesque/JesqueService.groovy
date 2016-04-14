@@ -208,6 +208,16 @@ class JesqueService implements DisposableBean {
         }
     }
 
+    void withWorker(String queueName, Closure closure) {
+        def jobFactory = new GrailsJobFactory(grailsApplication)
+        def worker = startWorker(queueName, jobFactory)
+        try {
+            closure()
+        } finally {
+            worker.end(true)
+        }
+    }
+
     void startWorkersFromConfig(ConfigObject jesqueConfigMap) {
         def startPaused = jesqueConfigMap.startPaused as boolean ?: false
 
@@ -321,7 +331,7 @@ class JesqueService implements DisposableBean {
             obj.each { key, value ->
                 jedis.hset(jobKey, key.toString(), value.toString())
             }
-            if(ttl > 0) {
+            if (ttl > 0) {
                 jedis.expire(jobKey, ttl)
             }
             jedis.sadd(CLASSES_KEY, "$name")

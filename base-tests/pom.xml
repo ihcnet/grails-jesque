@@ -147,15 +147,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.spockframework</groupId>
-            <artifactId>spock-grails-support</artifactId>
-            <version>0.7-groovy-2.0</version>
-            <scope>test</scope>
-
-        </dependency>
-
-
-        <dependency>
             <groupId>org.grails.plugins</groupId>
             <artifactId>cache</artifactId>
             <version>1.1.2</version>
@@ -176,14 +167,6 @@
             <artifactId>hibernate4</artifactId>
             <version>4.3.5.1</version>
             <scope>runtime</scope>
-            <type>zip</type>
-        </dependency>
-
-        <dependency>
-            <groupId>org.grails.plugins</groupId>
-            <artifactId>spock</artifactId>
-            <version>0.7</version>
-            <scope>test</scope>
             <type>zip</type>
         </dependency>
 
