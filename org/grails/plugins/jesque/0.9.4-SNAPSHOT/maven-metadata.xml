@@ -2,23 +2,23 @@
 <metadata modelVersion="1.1.0">
   <groupId>org.grails.plugins</groupId>
   <artifactId>jesque</artifactId>
-  <version>0.9-SNAPSHOT</version>
+  <version>0.9.4-SNAPSHOT</version>
   <versioning>
     <snapshot>
-      <timestamp>20160412.151518</timestamp>
+      <timestamp>20160414.082151</timestamp>
       <buildNumber>1</buildNumber>
     </snapshot>
-    <lastUpdated>20160412151518</lastUpdated>
+    <lastUpdated>20160414082151</lastUpdated>
     <snapshotVersions>
       <snapshotVersion>
         <extension>zip</extension>
-        <value>0.9-20160412.151518-1</value>
-        <updated>20160412151518</updated>
+        <value>0.9.4-20160414.082151-1</value>
+        <updated>20160414082151</updated>
       </snapshotVersion>
       <snapshotVersion>
         <extension>pom</extension>
-        <value>0.9-20160412.151518-1</value>
-        <updated>20160412151518</updated>
+        <value>0.9.4-20160414.082151-1</value>
+        <updated>20160414082151</updated>
       </snapshotVersion>
     </snapshotVersions>
   </versioning>
