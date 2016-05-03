@@ -22,15 +22,12 @@ import net.greghaines.jesque.Job;
 import net.greghaines.jesque.JobFailure;
 import net.greghaines.jesque.WorkerStatus;
 import net.greghaines.jesque.json.ObjectMapperFactory;
-import net.greghaines.jesque.utils.JedisUtils;
-import net.greghaines.jesque.utils.JesqueUtils;
-import net.greghaines.jesque.utils.PoolUtils;
-import net.greghaines.jesque.utils.VersionUtils;
+import net.greghaines.jesque.utils.*;
+import org.apache.commons.collections4.IterableUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Transaction;
 import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.util.Pool;
 
@@ -42,7 +39,6 @@ import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Set;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -69,6 +65,8 @@ public class WorkerJedisPoolImpl implements Worker {
     protected static final long EMPTY_QUEUE_SLEEP_TIME = 500; // 500 ms
     protected static final long RECONNECT_SLEEP_TIME = 5000; // 5 sec
     protected static final int RECONNECT_ATTEMPTS = 120; // Total time: 10 min
+    private final AtomicReference<String> popScriptHash = new AtomicReference<String>(null);
+    private final AtomicReference<String> lpoplpushScriptHash = new AtomicReference<String>(null);
 
     // Set the thread name to the message for debugging
     private static volatile boolean threadNameChangingEnabled = false;
@@ -101,11 +99,11 @@ public class WorkerJedisPoolImpl implements Worker {
      * @param queues the given queues
      */
     protected static void checkQueues(final Iterable<String> queues) {
-        if (queues == null) {
+        if (IterableUtils.isEmpty(queues)) {
             throw new IllegalArgumentException("queues must not be null");
         }
         for (final String queue : queues) {
-            if (queue == null || "".equals(queue)) {
+            if (StringUtils.isEmpty(queue)) {
                 throw new IllegalArgumentException("queues' members must not be null: " + queues);
             }
         }
@@ -176,25 +174,25 @@ public class WorkerJedisPoolImpl implements Worker {
         final Worker self = this;
         try {
             PoolUtils.doWorkInPool(this.jedisPool, new PoolUtils.PoolWork<Jedis, Void>() {
-                /**
-                 * {@inheritDoc}
-                 */
                 @Override
-                public Void doWork(final Jedis jedis) {
+                public Void doWork(Jedis jedis) throws Exception {
                     if (state.compareAndSet(NEW, RUNNING)) {
                         try {
-                            renameThread("RUNNING");
+                            WorkerJedisPoolImpl.this.renameThread("RUNNING");
                             threadRef.set(Thread.currentThread());
-                            jedis.sadd(key(WORKERS), name);
-                            jedis.set(key(WORKER, name, STARTED), new SimpleDateFormat(DATE_FORMAT).format(new Date()));
+                            jedis.sadd(WorkerJedisPoolImpl.this.key(WORKERS), name);
+                            jedis.set(WorkerJedisPoolImpl.this.key(WORKER, name, STARTED), new SimpleDateFormat(DATE_FORMAT).format(new Date()));
                             listenerDelegate.fireEvent(WORKER_START, self, null, null, null, null, null);
-                            poll();
+                            WorkerJedisPoolImpl.this.popScriptHash.set(jedis.scriptLoad(ScriptUtils.readScript("/workerScripts/jesque_pop.lua")));
+                            WorkerJedisPoolImpl.this.lpoplpushScriptHash.set(jedis.scriptLoad(
+                                    ScriptUtils.readScript("/workerScripts/jesque_lpoplpush.lua")));
+                            WorkerJedisPoolImpl.this.poll();
                         } finally {
-                            renameThread("STOPPING");
+                            WorkerJedisPoolImpl.this.renameThread("STOPPING");
                             listenerDelegate.fireEvent(WORKER_STOP, self, null, null, null, null, null);
-                            jedis.srem(key(WORKERS), name);
-                            jedis.del(key(WORKER, name), key(WORKER, name, STARTED), key(STAT, FAILED, name),
-                                    key(STAT, PROCESSED, name));
+                            jedis.srem(WorkerJedisPoolImpl.this.key(WORKERS), name);
+                            jedis.del(WorkerJedisPoolImpl.this.key(WORKER, name), WorkerJedisPoolImpl.this.key(WORKER, name, STARTED), WorkerJedisPoolImpl.this.key(STAT, FAILED, name),
+                                    WorkerJedisPoolImpl.this.key(STAT, PROCESSED, name));
                             jedis.quit();
                             threadRef.set(null);
                         }
@@ -210,7 +208,8 @@ public class WorkerJedisPoolImpl implements Worker {
             });
 
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexpected exception in run.", ex);
+            throw new RuntimeException(ex);
         }
     }
 
@@ -340,17 +339,20 @@ public class WorkerJedisPoolImpl implements Worker {
         try {
             PoolUtils.doWorkInPool(this.jedisPool, new PoolUtils.PoolWork<Jedis, Void>() {
                 @Override
-                public Void doWork(final Jedis jedis) {
+                public Void doWork(Jedis jedis) throws Exception {
                     checkQueues(queues);
                     queueNames.clear();
                     queueNames.addAll((queues == ALL_QUEUES) // Using object equality on purpose
-                            ? jedis.smembers(key(QUEUES)) // Like '*' in other clients
+                            ? jedis.smembers(WorkerJedisPoolImpl.this.key(QUEUES)) // Like '*' in other clients
                             : queues);
                     return null;
                 }
             });
+        } catch (IllegalArgumentException iae) {
+            throw iae;
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Error setting queues", ex);
+            throw new RuntimeException(ex);
         }
     }
 
@@ -455,42 +457,19 @@ public class WorkerJedisPoolImpl implements Worker {
      * @return a JSON string of a job or null if there was nothing to de-queue
      */
     protected String pop(final String curQueue) {
-        final StringBuffer stringBuffer = new StringBuffer();
         try {
-            PoolUtils.doWorkInPool(this.jedisPool, new PoolUtils.PoolWork<Jedis, Void>() {
+            final String key = key(QUEUE, curQueue);
+            return PoolUtils.doWorkInPool(this.jedisPool, new PoolUtils.PoolWork<Jedis, String>() {
                 @Override
-                public Void doWork(final Jedis jedis) {
-                    final String key = key(QUEUE, curQueue);
-                    // If a delayed queue, peek and remove from ZSET
-                    if (JedisUtils.isDelayedQueue(jedis, key)) {
-                        final long now = System.currentTimeMillis();
-                        // Peek ==> is there any item scheduled to run between -INF and now?
-                        final Set<String> payloadSet = jedis.zrangeByScore(key, -1, now, 0, 1);
-                        if (payloadSet != null && !payloadSet.isEmpty()) {
-                            final String tmp = payloadSet.iterator().next();
-                            // Try to acquire this job
-                            if (jedis.zrem(key, tmp) == 1) {
-                                stringBuffer.append(tmp);
-                            }
-                        }
-                    } else if (JedisUtils.isRegularQueue(jedis, key)) { // If a regular queue, pop from it
-                        final String tmp = lpoplpush(key, key(INFLIGHT, name, curQueue));
-                        if (StringUtils.isNotBlank(tmp)) {
-                            stringBuffer.append(tmp);
-                        }
-                    }
-                    return null;
+                public String doWork(Jedis jedis) throws Exception {
+                    return (String) jedis.evalsha(WorkerJedisPoolImpl.this.popScriptHash.get(), 3, key, WorkerJedisPoolImpl.this.key(INFLIGHT, WorkerJedisPoolImpl.this.name, curQueue),
+                            JesqueUtils.createRecurringHashKey(key), Long.toString(System.currentTimeMillis()));
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("failed to pop", ex);
+            throw new RuntimeException(ex);
         }
-        String returnString = stringBuffer.toString();
-        if (StringUtils.isBlank(returnString)) {
-            return null;
-        }
-        return returnString;
-
     }
 
     /**
@@ -534,7 +513,8 @@ public class WorkerJedisPoolImpl implements Worker {
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Failed to recover from exception", ex);
+            throw new RuntimeException(ex);
         }
 
     }
@@ -542,7 +522,7 @@ public class WorkerJedisPoolImpl implements Worker {
     /**
      * Checks to see if worker is paused. If so, wait until unpaused.
      *
-     * @throws java.io.IOException if there was an error creating the pause message
+     * @throws IOException if there was an error creating the pause message
      */
     protected void checkPaused() throws IOException {
         final String pauseMessage = pauseMsg();
@@ -569,7 +549,8 @@ public class WorkerJedisPoolImpl implements Worker {
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexcepected exception during checkPaused", ex);
+            throw new RuntimeException(ex);
         }
     }
 
@@ -606,7 +587,8 @@ public class WorkerJedisPoolImpl implements Worker {
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexpected exception during process", ex);
+            throw new RuntimeException(ex);
         }
 
     }
@@ -625,7 +607,8 @@ public class WorkerJedisPoolImpl implements Worker {
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexpected exception during removeInFlight with queue=" + curQueue, ex);
+            throw new RuntimeException(ex);
         }
     }
 
@@ -636,7 +619,7 @@ public class WorkerJedisPoolImpl implements Worker {
      * @param curQueue the queue the job came from
      * @param instance the materialized job
      * @return result of the execution
-     * @throws Exception if the instance is a {@link java.util.concurrent.Callable} and throws an exception
+     * @throws Exception if the instance is a {@link Callable} and throws an exception
      */
     protected Object execute(final Job job, final String curQueue, final Object instance) throws Exception {
         if (instance instanceof WorkerAware) {
@@ -681,7 +664,8 @@ public class WorkerJedisPoolImpl implements Worker {
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexpected exception during success", ex);
+            throw new RuntimeException(ex);
         }
         // The job may have taken a long time; make an effort to ensure the
         // connection is OK
@@ -714,7 +698,8 @@ public class WorkerJedisPoolImpl implements Worker {
                 }
             });
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexpected exception during failure", ex);
+            throw new RuntimeException(ex);
         }
     }
 
@@ -725,7 +710,7 @@ public class WorkerJedisPoolImpl implements Worker {
      * @param queue the queue the job came from
      * @param job   the Job that failed
      * @return the JSON representation of a new JobFailure
-     * @throws java.io.IOException if there was an error serializing the JobFailure
+     * @throws IOException if there was an error serializing the JobFailure
      */
     protected String failMsg(final Throwable t, final String queue, final Job job) throws IOException {
         final JobFailure failure = new JobFailure();
@@ -743,7 +728,7 @@ public class WorkerJedisPoolImpl implements Worker {
      * @param queue the queue the Job came from
      * @param job   the Job currently being processed
      * @return the JSON representation of a new WorkerStatus
-     * @throws java.io.IOException if there was an error serializing the WorkerStatus
+     * @throws IOException if there was an error serializing the WorkerStatus
      */
     protected String statusMsg(final String queue, final Job job) throws IOException {
         final WorkerStatus status = new WorkerStatus();
@@ -757,7 +742,7 @@ public class WorkerJedisPoolImpl implements Worker {
      * Create and serialize a WorkerStatus for a pause event.
      *
      * @return the JSON representation of a new WorkerStatus
-     * @throws java.io.IOException if there was an error serializing the WorkerStatus
+     * @throws IOException if there was an error serializing the WorkerStatus
      */
     protected String pauseMsg() throws IOException {
         final WorkerStatus status = new WorkerStatus();
@@ -806,45 +791,20 @@ public class WorkerJedisPoolImpl implements Worker {
     }
 
     protected String lpoplpush(final String from, final String to) {
-        final StringBuffer stringBuffer = new StringBuffer();
         try {
-            PoolUtils.doWorkInPool(this.jedisPool, new PoolUtils.PoolWork<Jedis, Void>() {
-                @Override
-                public Void doWork(final Jedis jedis) {
-                    while (JedisUtils.isRegularQueue(jedis, from)) {
-                        jedis.watch(from);
-                        // Get the leftmost value of the 'from' list. If it does not exist, there is nothing to pop.
-                        String val = null;
-                        if (JedisUtils.isRegularQueue(jedis, from)) {
-                            val = jedis.lindex(from, 0);
+            return PoolUtils.doWorkInPool(
+                    this.jedisPool,
+                    new PoolUtils.PoolWork<Jedis, String>() {
+                        @Override
+                        public String doWork(Jedis jedis) throws Exception {
+                            return (String) jedis.evalsha(WorkerJedisPoolImpl.this.lpoplpushScriptHash.get(), 2, from, to);
                         }
-                        if (val == null) {
-                            jedis.unwatch();
-                            break;
-                        }
-                        final Transaction tx = jedis.multi();
-                        tx.lpop(from);
-                        tx.lpush(to, val);
-                        if (tx.exec() != null) {
-                            stringBuffer.append(val);
-                            break;
-                        }
-                        // If execution of the transaction failed, this means that 'from'
-                        // was modified while we were watching it and the transaction was
-                        // not executed. We simply retry the operation.
                     }
-                    return null;
-                }
-            });
+            );
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.error("Unexpected exception popping from " + from + " and to " + to, ex);
+            throw new RuntimeException(ex);
         }
-
-        String returnString = stringBuffer.toString();
-        if (StringUtils.isBlank(returnString)) {
-            return null;
-        }
-        return returnString;
     }
 
     /**
